@@ -8,14 +8,17 @@
 #define TFT_CS 53
 
 
-int16_t * screenBuffer = (int16_t*) malloc(200);
+int16_t * screenBuffer = (int16_t*) malloc(400);
 
-double vScale = 40;
+double vScale = 10;
 double hScale = 30;
+double trigger = 6;
 
-  int columns = 15;
-  int rows = 11;
-  
+int columns = 15;
+int rows = 11;
+
+int triggerIndex;
+
 // Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 // If using the breakout, change pins as desired
@@ -38,16 +41,40 @@ void setup() {
   Serial.print("Image Format: 0x"); Serial.println(x, HEX);
   x = tft.readcommand8(ILI9341_RDSELFDIAG);
   Serial.print("Self Diagnostic: 0x"); Serial.println(x, HEX); 
-  
+  tft.fillScreen(ILI9341_BLACK);
   
 
   
  
   
-  for(int16_t i = 0; i < 320; i++) {
-    double sineVal = sin(i/3.141592)*20;
+  for(int16_t i = 0; i < 400; i++) {
+    double sineVal = sin(i/3.141592+2.2)*20;
     int16_t y = int16_t(sineVal);
     screenBuffer[i] = y;
+  }
+
+
+  bool prev = false;
+  for(int i = 140; i < 400; i++) {
+     Serial.println(screenBuffer[i]);
+     if(!prev && ( screenBuffer[i] > trigger)) {
+      triggerIndex = i;
+      Serial.print("Trigger Index: ");
+      Serial.println(triggerIndex);
+      break;
+     }
+     else if(prev && (screenBuffer[i] < trigger)) {
+      triggerIndex = i;
+      Serial.print("Trigger Index: ");
+      Serial.println(triggerIndex);
+      break;
+     }
+     if(screenBuffer[i] > trigger) {
+      prev = true;
+     }
+     else if(screenBuffer[i] < trigger) {
+      prev = false;
+     }
   }
   
   drawFrame();
@@ -59,24 +86,21 @@ void setup() {
 void loop(void) {
   drawFrame();
   for(int16_t i = 0; i < 14*20; i++) {
-    if(i != 0) {
-      screenBuffer[i-1] = screenBuffer[i];
-    }
-    if((screenBuffer[i]*10/vScale+100) > 200) {
-      continue;
-    }
+    
     if(i*100/hScale > 280) {
       continue;
     }
-    tft.drawPixel(i*100/hScale,screenBuffer[i]*10/vScale+100,ILI9341_GREEN);
-    Serial.println(screenBuffer[i]);
-    delay(10);
+    tft.drawPixel(i*100/hScale,screenBuffer[triggerIndex-140+i]*10/vScale+100,ILI9341_GREEN);
+    //Serial.println(screenBuffer[i]);
+    
   }
+
+  
   
 }
 
 void drawFrame() {
-  tft.fillRect(0,0,285,240,ILI9341_BLACK);
+  tft.fillRect(0, 0, 285, 240, ILI9341_BLACK);
    
   for(int16_t i = 0; i < columns; i++) {
     for(int16_t j = 0; j < rows; j++) {
