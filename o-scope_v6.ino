@@ -52,7 +52,7 @@ AnalogBufferDMA abdma2(dma_adc_buff2_1, buffer_size, dma_adc_buff2_2, buffer_siz
 
 elapsedMillis elapsed_sinc_last_display;
 
-Encoder trigger_Enc(21, 22);
+Encoder trigger_Enc(22, 21);
 int triggerIndex = 0;
 //Encoder scale_Enc(19, 20);
 #define scale_select 18
@@ -138,7 +138,8 @@ void loop() {
 }
 
 void ProcessAnalogData(AnalogBufferDMA *pabdma, int8_t adc_num1) {
- // trigger = trigger_Enc.read();
+  trigger = trigger_Enc.read();
+  trigger= clamp(trigger,-20,20);
   hScale = clamp(hScale, h_scale_min, h_scale_max);
   vScale = clamp(vScale, vScale_min, vScale_max);
 
@@ -155,13 +156,14 @@ void ProcessAnalogData(AnalogBufferDMA *pabdma, int8_t adc_num1) {
   // Only set the trigger index if we found a valid trigger point
   volatile uint16_t triggerIndex = get_trigger_index(pabdma);
 
-  // if (triggerIndex != -1) {
-  //   pbuffer += triggerIndex;
-  // }
+  if (triggerIndex != 65535) {
+    pbuffer += (triggerIndex - (160));
+  }
 
   float y_prev;
   float x_prev;
-
+Serial.print("\nTrigger index:");
+Serial.print(triggerIndex);
   for (volatile uint16_t *i = pbuffer; i < pbuffer + 320; i++) {
     float y1 = ((((*i * 3.3) / 1024) / 1.65));
     float y2 = (y1 - 1.17) * 20 * (-1);
