@@ -54,7 +54,7 @@ elapsedMillis elapsed_sinc_last_display;
 
 Encoder trigger_Enc(21, 22);
 int triggerIndex = 0;
-Encoder scale_Enc(19, 20);
+//Encoder scale_Enc(19, 20);
 #define scale_select 18
 
 int h_scale_min = 1;
@@ -67,7 +67,7 @@ unsigned long int last = 0;
 bool first_print = true;
 volatile uint16_t *prev_data;
 
-#define chA 19  
+#define chA 19
 #define chB 20
 int aState;
 int aLastState;
@@ -76,15 +76,23 @@ float vcounter = 1;
 #define scale_select 18
 volatile int buttonState = 0;
 
+
+//Variables for low-pass filtering
+const float alpha = 0.8;            //<- Making this valu lower intensifies filtering effect and vice-versa
+double data_filtered[] = { 0, 0 };  // data_filtered[n] is where the most recent filtered value can be accessed
+const int n = 1;
+
+
 void setup() {
   pinMode(scale_select, INPUT);
   pinMode(chA, INPUT);
   pinMode(chB, INPUT);
-  
+
   aLastState = digitalRead(chA);
   attachInterrupt(digitalPinToInterrupt(chA), update_encoder, CHANGE);
   Serial.begin(1000000);
-  while (!Serial && millis() < 5000);
+  while (!Serial && millis() < 5000)
+    ;
 
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(readPin_adc_0, INPUT_DISABLE);
@@ -92,7 +100,7 @@ void setup() {
 
   adc->adc0->setAveraging(1);
   adc->adc0->setResolution(10);
-  adc->adc1->setAveraging(1);
+  adc->adc1->setAveraging(80);
   adc->adc1->setResolution(10);
 
   abdma1.init(adc, ADC_0);
@@ -113,7 +121,7 @@ void setup() {
 
 void loop() {
   buttonState = digitalRead(scale_select);  // Read button state
-  drawFrame();  // initialize blank frame
+  drawFrame();                              // initialize blank frame
   if (abdma1.interrupted() && abdma2.interrupted()) {
     ProcessAnalogData(&abdma1, 0);
     ProcessAnalogData(&abdma2, 1);
@@ -130,6 +138,7 @@ void loop() {
 }
 
 void ProcessAnalogData(AnalogBufferDMA *pabdma, int8_t adc_num1) {
+  trigger = trigger_Enc.read();
   hScale = clamp(hScale, h_scale_min, h_scale_max);
 
   volatile uint16_t *pbuffer = pabdma->bufferLastISRFilled();
@@ -145,15 +154,17 @@ void ProcessAnalogData(AnalogBufferDMA *pabdma, int8_t adc_num1) {
   volatile uint16_t triggerIndex = get_trigger_index(pabdma);
   float y_prev;
   float x_prev;
-  for (volatile uint16_t *i = pbuffer; i < pbuffer + 320; i++) {
+if(trig_flag){
+    for (volatile uint16_t *i = pbuffer+triggerIndex - 160; i < pbuffer+triggerIndex - 160 + 320; i++) {
     float y1 = ((((*i * 3.3) / 1024) / 1.65));
     float y2 = (y1 - 1.17) * 20 * (-1);
     float y3 = mapVoltageToRange(y2);
     if (adc_num1 == 0) {
       if (!first_print) {
         tft.drawLine(x_prev, y_prev, x * 100 / hScale, y3, ILI9341_GREEN);
+
       } else {
-        tft.drawLine(x_prev, y_prev, x * 100 / hScale, y3, ILI9341_GREEN);
+        // tft.drawLine(x_prev, y_prev, x * 100 / hScale, y3, ILI9341_GREEN);
       }
     } else {
       if (!first_print) {
@@ -166,6 +177,30 @@ void ProcessAnalogData(AnalogBufferDMA *pabdma, int8_t adc_num1) {
     x++;
     y_prev = y3;
   }
+}else{
+  for (volatile uint16_t *i = pbuffer; i < pbuffer + 320; i++) {
+    float y1 = ((((*i * 3.3) / 1024) / 1.65));
+    float y2 = (y1 - 1.17) * 20 * (-1);
+    float y3 = mapVoltageToRange(y2);
+    if (adc_num1 == 0) {
+      if (!first_print) {
+        tft.drawLine(x_prev, y_prev, x * 100 / hScale, y3, ILI9341_GREEN);
+
+      } else {
+        // tft.drawLine(x_prev, y_prev, x * 100 / hScale, y3, ILI9341_GREEN);
+      }
+    } else {
+      if (!first_print) {
+        tft.drawLine(x_prev, y_prev, x * 100 / hScale, y3, ILI9341_BLUE);
+      } else {
+        tft.drawLine(x_prev, y_prev, x * 100 / hScale, y3, ILI9341_BLUE);
+      }
+    }
+    x_prev = x * 100 / hScale;
+    x++;
+    y_prev = y3;
+  }
+}
   pabdma->clearInterrupt();
 
   trig_flag = false;
@@ -222,20 +257,30 @@ volatile uint16_t get_trigger_index(AnalogBufferDMA *dma_buffer_in) {
   volatile uint16_t *end_pbuffer = screenBuffer + dma_buffer_in->bufferCountLastISRFilled();
   volatile uint16_t *triggerIndex = screenBuffer + 140;
 
-  for (volatile uint16_t *i = screenBuffer + 140; i < end_pbuffer - 140; i++) {
-    if (*i == trigger) {
+
+  for (volatile uint16_t *i = screenBuffer + 160; i < end_pbuffer - 160; i++) {
+    float y1 = ((((*i * 3.3) / 1024) / 1.65));
+    float y2 = (y1 - 1.17) * 20 * (-1);
+      Serial.print("\nTrigger voltage: ");
+  Serial.print(trigger);
+  Serial.print("  Current voltage: ");
+  Serial.print(y2);
+    if (abs(trigger -y2) < 0.5) {
+      Serial.print("\n\nTriggered\n\n");
+
       triggerIndex = i;
       trig_flag = true;
-      break;
+      return triggerIndex;
     }
   }
-  return triggerIndex;
+  trig_flag = false;
+  return -1;
 }
 
 // Function to map voltage to the desired range and return an integer
 int mapVoltageToRange(float voltage) {
   float max = 20.0;
-  if (voltage < (-1)*max) voltage = (-1)*max;
+  if (voltage < (-1) * max) voltage = (-1) * max;
   if (voltage > max) voltage = max;
   int max_pixel = 240 - (24 * vScale);
   int min_pixel = 24 * vScale;
@@ -269,4 +314,19 @@ void update_encoder() {
   }
   // Update the last state
   aLastState = aState;
+}
+
+double filter_data(float data_in) {
+  // if the received serial command tells us to send sensor data, take a measurement from the photodiode,
+  // pass it through the lowpass filter, and send it back to the PC/
+  //  if (c == send_data) {
+  // Retrieve Data
+
+
+  // Low Pass Filter
+  data_filtered[n] = alpha * data_in + (1 - alpha) * data_filtered[n - 1];
+
+  // Store the last filtered data in data_filtered[n-1]
+  data_filtered[n - 1] = data_filtered[n];
+  return data_filtered[n];
 }
