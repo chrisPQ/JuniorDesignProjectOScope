@@ -3,6 +3,8 @@ Teensy program to run oscilloscope and output to screen
 
 Video Overview: https://www.youtube.com/watch?v=Kpc6_z2Lm2U&ab_channel=MarshallG
 
+Showcase Page: https://eecs.engineering.oregonstate.edu/project-showcase/projects/?id=eiNZnlOKVvULkvkf
+
 Design Problem:
 The design problem was to create a 2-channel oscilloscope. The scope needed to have voltage
 scaling, time scaling, and trigger capabilities. The system also needs to have AC/DC coupling
